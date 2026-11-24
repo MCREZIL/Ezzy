@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: labcoder
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    buildFilter:
+      ignoredPaths:
+        - generated/**
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ACCESS_PASSWORD
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: GITHUB_BRANCH
+        value: main
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5-5
