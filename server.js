@@ -6,15 +6,13 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.set("trust proxy", 1); // Render sits behind a proxy
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "300kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
-const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD;
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+const client = new Anthropic();
 
-if (!ACCESS_PASSWORD) console.warn("ACCESS_PASSWORD is not set: all /api routes will refuse requests.");
 if (!process.env.ANTHROPIC_API_KEY) console.warn("ANTHROPIC_API_KEY is not set: generation will fail.");
 
 const LANGUAGES = {
@@ -38,17 +36,6 @@ const LANGUAGES = {
   css: { label: "CSS", ext: "css" },
 };
 
-// ---- auth + rate limiting ----
-const sha = (s) => crypto.createHash("sha256").update(String(s)).digest();
-function requireAuth(req, res, next) {
-  if (!ACCESS_PASSWORD) return res.status(503).json({ error: "Server is missing ACCESS_PASSWORD." });
-  const given = req.get("x-access-password") || "";
-  if (!crypto.timingSafeEqual(sha(given), sha(ACCESS_PASSWORD))) {
-    return res.status(401).json({ error: "Wrong access password." });
-  }
-  next();
-}
-
 const hits = new Map();
 function rateLimit(req, res, next) {
   const now = Date.now();
@@ -59,7 +46,6 @@ function rateLimit(req, res, next) {
   next();
 }
 
-// ---- helpers ----
 const systemPrompt = (label) =>
   `You are a code generator for a research lab. Write complete, correct, runnable ${label} code for the user's task. ` +
   `Include brief comments, sensible error handling, and a usage example where it makes sense. ` +
@@ -78,8 +64,7 @@ function makeFilename(language, prompt) {
   return `${slug}.${ext}`;
 }
 
-// ---- routes ----
-app.get("/api/config", requireAuth, (_req, res) => {
+app.get("/api/config", (_req, res) => {
   res.json({
     languages: Object.entries(LANGUAGES).map(([id, v]) => ({ id, label: v.label })),
     githubEnabled: Boolean(process.env.GITHUB_TOKEN && process.env.GITHUB_REPO),
@@ -87,7 +72,7 @@ app.get("/api/config", requireAuth, (_req, res) => {
   });
 });
 
-app.post("/api/generate", requireAuth, rateLimit, async (req, res) => {
+app.post("/api/generate", rateLimit, async (req, res) => {
   const { language, prompt } = req.body || {};
   if (!LANGUAGES[language]) return res.status(400).json({ error: "Choose a supported language." });
   if (typeof prompt !== "string" || prompt.trim().length < 5 || prompt.length > 4000) {
@@ -108,8 +93,8 @@ app.post("/api/generate", requireAuth, rateLimit, async (req, res) => {
   }
 });
 
-app.post("/api/commit", requireAuth, rateLimit, async (req, res) => {
-  const { GITHUB_TOKEN, GITHUB_REPO } = process.env; // GITHUB_REPO = "owner/repo"
+app.post("/api/commit", rateLimit, async (req, res) => {
+  const { GITHUB_TOKEN, GITHUB_REPO } = process.env;
   if (!GITHUB_TOKEN || !GITHUB_REPO) {
     return res.status(503).json({ error: "GitHub is not configured. Set GITHUB_TOKEN and GITHUB_REPO." });
   }
